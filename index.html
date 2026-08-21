@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Uy xarajatlari</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<style>
+  * { box-sizing: border-box; touch-action: manipulation; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--tg-theme-bg-color, #f4f5f7);
+    color: var(--tg-theme-text-color, #222);
+    margin: 0;
+    padding: 16px;
+  }
+  .card {
+    background: var(--tg-theme-secondary-bg-color, #fff);
+    border-radius: 16px;
+    padding: 20px;
+    max-width: 460px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; text-align: center; }
+  .sub { font-size: 12px; color: #999; text-align: center; margin-bottom: 18px; }
+
+  .totalsBox { display: flex; gap: 8px; margin-bottom: 14px; }
+  .totalCard {
+    flex: 1; background: #f7f8fa; border-radius: 12px; padding: 12px; text-align: center;
+  }
+  .totalCard .who { font-size: 12px; color: #888; margin-bottom: 4px; }
+  .totalCard .amt { font-size: 16px; font-weight: 700; color: #4f7cff; }
+
+  .grandTotal {
+    background: #eef1f5; border-radius: 12px; padding: 12px; text-align: center;
+    margin-bottom: 10px; font-size: 14px;
+  }
+  .grandTotal b { color: #222; font-size: 18px; }
+
+  .settleBox {
+    background: #fff7e6; border: 1px solid #ffe1a8; border-radius: 12px;
+    padding: 12px; text-align: center; margin-bottom: 16px; font-size: 13px; color: #8a6100;
+  }
+  .settleBox b { color: #b5790a; }
+  .settleBox.even { background: #eafaf0; border-color: #b8ebcc; color: #1f8a4c; }
+  .settleBox.even b { color: #1f8a4c; }
+
+  .addBtn {
+    width: 100%; padding: 12px; border: none; border-radius: 10px; background: #4f7cff;
+    color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 16px;
+  }
+
+  .entry {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 0; border-bottom: 1px solid #f0f0f0; gap: 10px; cursor: pointer;
+  }
+  .entry:last-child { border-bottom: none; }
+  .entry .left { flex: 1; }
+  .entry .item { font-size: 14px; font-weight: 600; }
+  .entry .meta { font-size: 12px; color: #999; margin-top: 2px; }
+  .entry .meta .who { color: #4f7cff; font-weight: 600; }
+  .entry .amount { font-size: 15px; font-weight: 700; color: #222; white-space: nowrap; }
+
+  .empty { text-align: center; color: #aaa; font-size: 13px; padding: 24px 0; }
+
+  .status { font-size: 12px; text-align: center; margin-top: 12px; min-height: 16px; font-weight: 600; }
+  .status.ok { color: #2ecc71; }
+  .status.fail { color: #e74c3c; }
+  .status.info { color: #999; }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 10;
+  }
+  .overlay.hidden { display: none; }
+  .overlayCard {
+    background: #fff; border-radius: 16px; padding: 20px; width: 100%; max-width: 380px;
+  }
+  .overlayCard h2 { font-size: 16px; margin: 0 0 14px; text-align: center; }
+  .formRow { margin-bottom: 12px; }
+  .formRow label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; }
+  .formRow input {
+    width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;
+    font-size: 16px; background: #f7f8fa; color: #222;
+  }
+  .overlayBtn {
+    width: 100%; padding: 12px; border: none; border-radius: 10px; background: #4f7cff;
+    color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 6px;
+  }
+  .overlayBtn.danger { background: #e74c3c; }
+  .overlayBtnSecondary {
+    width: 100%; padding: 10px; border: none; background: none; color: #999;
+    font-size: 13px; cursor: pointer; margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🏠 Uy xarajatlari</h1>
+  <div class="sub" id="youAre">Yuklanmoqda...</div>
+
+  <div class="totalsBox" id="totalsBox"></div>
+  <div class="grandTotal">Umumiy xarajat: <b id="grandTotal">₩0</b></div>
+  <div class="settleBox" id="settleBox" style="display:none;"></div>
+
+  <button class="addBtn" onclick="openEntryForm()">➕ Xarajat qo'shish</button>
+
+  <div id="listView"></div>
+
+  <div class="status" id="statusMsg"></div>
+</div>
+
+<div class="overlay hidden" id="entryOverlay">
+  <div class="overlayCard">
+    <h2 id="entryFormTitle">Yangi xarajat</h2>
+    <div class="formRow">
+      <label>Sana</label>
+      <input type="date" id="entryDate">
+    </div>
+    <div class="formRow">
+      <label>Nima oldingiz</label>
+      <input type="text" id="entryItem" placeholder="Masalan: pomidor, non, gaz">
+    </div>
+    <div class="formRow">
+      <label>Summa (₩)</label>
+      <input type="number" inputmode="decimal" id="entryAmount" placeholder="0">
+    </div>
+    <button class="overlayBtn" onclick="saveEntry()">Saqlash</button>
+    <button class="overlayBtn danger" id="deleteEntryBtn" onclick="deleteEntry()" style="display:none;">O'chirish</button>
+    <button class="overlayBtnSecondary" onclick="closeEntryForm()">Bekor qilish</button>
+  </div>
+</div>
+
+<script>
+const tg = window.Telegram ? window.Telegram.WebApp : null;
+if (tg) { tg.ready(); tg.expand(); }
+
+let lastTouchEnd = 0;
+document.addEventListener('touchend', function (event) {
+  const tag = event.target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  const now = Date.now();
+  if (now - lastTouchEnd <= 350) event.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
+document.addEventListener('gesturestart', function (event) { event.preventDefault(); });
+
+// ====== FIREBASE SOZLAMALARI ======
+// Bu qiymatlarni Firebase Console'dagi o'z loyihangiz sozlamalaridan
+// nusxalab, shu yerga joylashtiring (pastdagi qo'llanmaga qarang).
+const firebaseConfig = {
+  apiKey: "AIzaSyALoMnUIFP1r5Ol0XD15jVrpKDmCjbk5A0",
+  authDomain: "harajatlar-2c00d.firebaseapp.com",
+  databaseURL: "https://harajatlar-2c00d-default-rtdb.firebaseio.com",
+  projectId: "harajatlar-2c00d",
+  storageBucket: "harajatlar-2c00d.firebasestorage.app",
+  messagingSenderId: "905274239250",
+  appId: "1:905274239250:web:d2c430116321d27ebbebcb"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const expensesRef = db.ref("expenses");
+// ===================================
+
+function showMsg(text) {
+  if (tg && tg.showAlert) tg.showAlert(text);
+  else alert(text);
+}
+function setStatus(msg, cls) {
+  const el = document.getElementById("statusMsg");
+  el.textContent = msg;
+  el.className = "status" + (cls ? " " + cls : "");
+}
+function fmt(n) {
+  return "₩" + Number(n || 0).toLocaleString("en-US");
+}
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+
+// Telegram profilidan foydalanuvchi ismini olish
+const tgUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user : null;
+const myName = tgUser ? (tgUser.first_name || "Foydalanuvchi") : "Mehmon";
+
+document.getElementById("youAre").textContent = "Siz: " + myName;
+
+let entries = {};
+let editingKey = null;
+
+setStatus("Ulanmoqda...", "info");
+
+expensesRef.on("value", (snapshot) => {
+  entries = snapshot.val() || {};
+  setStatus("", "");
+  render();
+}, (error) => {
+  setStatus("Ulanish xatosi: " + error.message, "fail");
+});
+
+function entriesArray() {
+  return Object.keys(entries).map(key => ({ key, ...entries[key] }));
+}
+
+function render() {
+  const list = entriesArray();
+  const totals = {};
+  let grand = 0;
+  list.forEach(e => {
+    totals[e.person] = (totals[e.person] || 0) + Number(e.amount || 0);
+    grand += Number(e.amount || 0);
+  });
+
+  const totalsBox = document.getElementById("totalsBox");
+  totalsBox.innerHTML = "";
+  Object.keys(totals).sort().forEach(name => {
+    const div = document.createElement("div");
+    div.className = "totalCard";
+    div.innerHTML = `<div class="who">${name}</div><div class="amt">${fmt(totals[name])}</div>`;
+    totalsBox.appendChild(div);
+  });
+
+  document.getElementById("grandTotal").textContent = fmt(grand);
+
+  renderSettle(totals);
+  renderList(list);
+}
+
+function renderSettle(totals) {
+  const box = document.getElementById("settleBox");
+  const names = Object.keys(totals);
+  if (names.length !== 2) {
+    box.style.display = "none";
+    return;
+  }
+  const a = names[0], b = names[1];
+  const diff = totals[a] - totals[b];
+  box.style.display = "block";
+  if (Math.abs(diff) < 1) {
+    box.className = "settleBox even";
+    box.innerHTML = "Ikkovingiz teng to'lagansiz ✓";
+  } else {
+    box.className = "settleBox";
+    const debtor = diff > 0 ? b : a;
+    const creditor = diff > 0 ? a : b;
+    const half = Math.abs(diff) / 2;
+    box.innerHTML = "<b>" + debtor + "</b> → <b>" + creditor + "</b>ga " + fmt(half) + " berishi kerak (teng bo'linish uchun)";
+  }
+}
+
+function renderList(list) {
+  const el = document.getElementById("listView");
+  if (list.length === 0) {
+    el.innerHTML = '<div class="empty">Hali xarajat qo\'shilmagan</div>';
+    return;
+  }
+  const sorted = [...list].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  el.innerHTML = "";
+  sorted.forEach(e => {
+    const row = document.createElement("div");
+    row.className = "entry";
+    row.onclick = () => openEntryForm(e.key);
+    row.innerHTML = '<div class="left"><div class="item">' + e.item + '</div><div class="meta"><span class="who">' + e.person + '</span> · ' + e.date + '</div></div><div class="amount">' + fmt(e.amount) + '</div>';
+    el.appendChild(row);
+  });
+}
+
+function openEntryForm(key) {
+  editingKey = key || null;
+  const overlay = document.getElementById("entryOverlay");
+  const title = document.getElementById("entryFormTitle");
+  const delBtn = document.getElementById("deleteEntryBtn");
+
+  if (editingKey) {
+    const e = entries[editingKey];
+    title.textContent = "Xarajatni tahrirlash";
+    document.getElementById("entryDate").value = e.date;
+    document.getElementById("entryItem").value = e.item;
+    document.getElementById("entryAmount").value = e.amount;
+    delBtn.style.display = e.person === myName ? "block" : "none";
+  } else {
+    title.textContent = "Yangi xarajat";
+    document.getElementById("entryDate").value = todayStr();
+    document.getElementById("entryItem").value = "";
+    document.getElementById("entryAmount").value = "";
+    delBtn.style.display = "none";
+  }
+  overlay.classList.remove("hidden");
+}
+
+function closeEntryForm() {
+  document.getElementById("entryOverlay").classList.add("hidden");
+  editingKey = null;
+}
+
+async function saveEntry() {
+  const date = document.getElementById("entryDate").value;
+  const item = document.getElementById("entryItem").value.trim();
+  const amount = Number(document.getElementById("entryAmount").value) || 0;
+
+  if (!date || !item || amount <= 0) {
+    showMsg("Iltimos, sana, nom va summani to'liq kiriting.");
+    return;
+  }
+
+  setStatus("Saqlanmoqda...", "");
+  try {
+    if (editingKey) {
+      await expensesRef.child(editingKey).update({ date: date, item: item, amount: amount });
+    } else {
+      await expensesRef.push({ date: date, item: item, amount: amount, person: myName, ts: Date.now() });
+    }
+    setStatus("Saqlandi ✓", "ok");
+    setTimeout(() => setStatus("", ""), 1200);
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
+  } catch (e) {
+    setStatus("Xatolik: " + e.message, "fail");
+  }
+  closeEntryForm();
+}
+
+async function deleteEntry() {
+  if (!editingKey) return;
+  try {
+    await expensesRef.child(editingKey).remove();
+  } catch (e) {
+    setStatus("Xatolik: " + e.message, "fail");
+  }
+  closeEntryForm();
+}
+</script>
+</body>
+</html>
